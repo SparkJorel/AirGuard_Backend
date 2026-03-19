@@ -1,3 +1,7 @@
-from django.shortcuts import render
+from rest_framework import viewsets
+from .models import ReleveMeteo
+from .serializers import ReleveMeteoSerializer
 
-# Create your views here.
+class ReleveMeteoViewSet(viewsets.ModelViewSet):
+    queryset = ReleveMeteo.objects.all().order_by('-date')
+    serializer_class = ReleveMeteoSerializer

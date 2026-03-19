@@ -1,3 +1,11 @@
-from django.shortcuts import render
+from rest_framework import viewsets
+from .models import Region, Ville
+from .serializers import RegionSerializer, VilleSerializer
 
-# Create your views here.
+class RegionViewSet(viewsets.ModelViewSet):
+    queryset = Region.objects.all()
+    serializer_class = RegionSerializer
+
+class VilleViewSet(viewsets.ModelViewSet):
+    queryset = Ville.objects.all()
+    serializer_class = VilleSerializer
