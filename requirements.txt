@@ -40,7 +40,6 @@ jsonschema-specifications==2025.9.1
 lightgbm==4.6.0
 msgpack==1.1.2
 numpy==2.4.4
-nvidia-nccl-cu12==2.29.7
 openai==2.29.0
 pandas==3.0.2
 pillow==12.1.1

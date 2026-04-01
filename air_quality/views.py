@@ -2,14 +2,13 @@ import io
 from django.http import FileResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-import openai
+from openai import OpenAI
 from django.utils import timezone
 from django.conf import settings
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Avg 
-from django.utils import timezone
+from django.db.models import Avg
 from .models import QualiteAir
 from .serializers import QualiteAirSerializer
 from .ml_service import predire_tous_les_indicateurs
@@ -47,7 +46,7 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
         })
     
     @action(detail=False, methods=['get'], url_path='reports/pdf')
-    def generate_pdf_report(request, *args, **kwargs):
+    def generate_pdf_report(self, request, *args, **kwargs):
         buffer = io.BytesIO()
         
         p = canvas.Canvas(buffer, pagesize=letter)
@@ -88,9 +87,8 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
             })
 
         try:
-            openai.api_key = settings.OPENAI_API_KEY
-            
-            # Pour definir le Contexte de la conversation
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
             system_prompt = (
                 "Tu es AirGuard, un assistant virtuel expert en qualité de l'air, climat et santé publique au Cameroun. "
                 "Tu t'adresses à des citoyens. Tes réponses doivent être concises, bienveillantes et proposer des "
@@ -98,17 +96,17 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
                 "adapte-toi au contexte climatique local."
             )
 
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
                 ],
                 max_tokens=200,
-                temperature=0.7 
+                temperature=0.7
             )
-            
-            bot_reply = response.choices[0].message['content'].strip()
+
+            bot_reply = response.choices[0].message.content.strip()
             
             return Response({
                 "response": bot_reply,
