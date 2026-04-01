@@ -163,7 +163,7 @@ def generer_alertes_automatiques():
     Retourne le nombre d'alertes créées.
     """
     aujourd_hui = timezone.now().date()
-    created = 0
+    alerts_to_create = []
 
     from django.db.models import Max, Subquery, OuterRef
 
@@ -204,7 +204,7 @@ def generer_alertes_automatiques():
 
         reco = RECOMMANDATIONS[niveau]
 
-        Alerte.objects.create(
+        alerts_to_create.append(Alerte(
             ville=ville,
             niveau_severite=niveau,
             statut='brouillon',
@@ -222,7 +222,9 @@ def generer_alertes_automatiques():
                 'categorie': dernier_aqi.categorie,
                 'date': str(dernier_aqi.date_cible),
             },
-        )
-        created += 1
+        ))
 
-    return created
+    if alerts_to_create:
+        Alerte.objects.bulk_create(alerts_to_create)
+
+    return len(alerts_to_create)

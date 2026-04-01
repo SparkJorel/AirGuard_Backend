@@ -1,3 +1,4 @@
+import logging
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -6,6 +7,8 @@ from .models import Alerte
 from .serializers import AlerteSerializer
 from .services import envoyer_notification_push
 from users.models import Utilisateur
+
+logger = logging.getLogger(__name__)
 
 
 class AlerteViewSet(viewsets.ModelViewSet):
@@ -87,10 +90,10 @@ class AlerteViewSet(viewsets.ModelViewSet):
         ).prefetch_related('villes_favorites').exclude(fcm_token__isnull=True).exclude(fcm_token__exact='')
 
         titre = f"Alerte AirGuard : {ville.nom}"
+        sent, failed = 0, 0
 
         for user in utilisateurs:
-            # Residents get resident recommendations, others get visitor ones
-            is_resident = user.villes_favorites.filter(id=ville.id).exists()
+            is_resident = any(v.id == ville.id for v in user.villes_favorites.all())
             if user.langue_preferee == 'en':
                 message = alerte.recommandations_residents_en if is_resident else alerte.recommandations_visiteurs_en
             else:
@@ -99,7 +102,7 @@ class AlerteViewSet(viewsets.ModelViewSet):
             if not message:
                 message = alerte.message_fr if user.langue_preferee == 'fr' else alerte.message_en
 
-            envoyer_notification_push(
+            success, _ = envoyer_notification_push(
                 fcm_token=user.fcm_token,
                 titre=titre,
                 message=message,
@@ -109,3 +112,9 @@ class AlerteViewSet(viewsets.ModelViewSet):
                     "type": "resident" if is_resident else "visiteur",
                 }
             )
+            if success:
+                sent += 1
+            else:
+                failed += 1
+
+        logger.info("Notifications alerte #%d (%s) : %d envoyées, %d échouées", alerte.id, ville.nom, sent, failed)

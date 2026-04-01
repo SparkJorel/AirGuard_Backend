@@ -211,3 +211,4 @@ __pycache__/
 *.sqlite3
 .env
 airguard-firebase-adminsdk.json
+firebase-adminsdk.json
