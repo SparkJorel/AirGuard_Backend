@@ -90,12 +90,15 @@ DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.sqlite3')
 if DB_ENGINE in ('django.db.backends.postgresql', 'django.db.backends.postgresql_psycopg'):
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
+            'ENGINE': DB_ENGINE,
             'NAME': os.getenv('DB_NAME', 'airguard'),
             'USER': os.getenv('DB_USER', 'airguard'),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', 'localhost'),
             'PORT': os.getenv('DB_PORT', '5432'),
+            'OPTIONS': {
+                'client_encoding': 'UTF8',
+            },
         }
     }
 else:

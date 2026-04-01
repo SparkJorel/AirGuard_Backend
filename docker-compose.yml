@@ -7,8 +7,9 @@ services:
       POSTGRES_DB: airguard
       POSTGRES_USER: airguard
       POSTGRES_PASSWORD: airguard_secure_2026
+      POSTGRES_INITDB_ARGS: "--locale=C"
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - airguard-pgdata:/var/lib/postgresql/data
     healthcheck:

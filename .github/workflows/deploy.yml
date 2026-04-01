@@ -24,5 +24,6 @@ jobs:
             sleep 10
             docker exec airguard-backend python manage.py migrate --noinput
             docker exec airguard-backend python manage.py seed_locations
+            docker exec airguard-backend python manage.py ensure_admin
             echo "Deploy done at $(date)"
           DEPLOY
