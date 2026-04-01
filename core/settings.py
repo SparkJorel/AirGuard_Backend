@@ -87,7 +87,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.sqlite3')
 
-if DB_ENGINE == 'django.db.backends.postgresql':
+if DB_ENGINE in ('django.db.backends.postgresql', 'django.db.backends.postgresql_psycopg'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -181,3 +181,15 @@ SPECTACULAR_SETTINGS = {
 
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
