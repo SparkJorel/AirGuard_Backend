@@ -1,8 +1,27 @@
 services:
+  airguard-db:
+    image: postgres:16-alpine
+    container_name: airguard-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: airguard
+      POSTGRES_USER: airguard
+      POSTGRES_PASSWORD: airguard_secure_2026
+    volumes:
+      - airguard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   airguard-backend:
     build: .
     container_name: airguard-backend
     restart: unless-stopped
+    depends_on:
+      airguard-db:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8001:8000"
     env_file:
@@ -10,9 +29,12 @@ services:
     environment:
       - DEBUG=False
       - ALLOWED_HOSTS=api.airguard-cm.duckdns.org,airguard-cm.duckdns.org,localhost,127.0.0.1
-      - DB_PATH=/app/db/db.sqlite3
-    volumes:
-      - airguard-db:/app/db
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=airguard
+      - DB_USER=airguard
+      - DB_PASSWORD=airguard_secure_2026
+      - DB_HOST=airguard-db
+      - DB_PORT=5432
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/docs/')"]
       interval: 30s
@@ -20,4 +42,4 @@ services:
       retries: 3
 
 volumes:
-  airguard-db:
+  airguard-pgdata:
