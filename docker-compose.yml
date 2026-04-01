@@ -10,8 +10,14 @@ services:
     environment:
       - DEBUG=False
       - ALLOWED_HOSTS=api.airguard-cm.duckdns.org,airguard-cm.duckdns.org,localhost,127.0.0.1
+      - DB_PATH=/app/db/db.sqlite3
+    volumes:
+      - airguard-db:/app/db
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/docs/')"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  airguard-db:
