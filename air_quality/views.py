@@ -73,7 +73,7 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
         buffer.seek(0)
         return FileResponse(buffer, as_attachment=True, filename='Rapport_AirGuard.pdf')
     
-    @action(detail=False, methods=['post'], url_path='chat')
+    @action(detail=False, methods=['post'], url_path='chat', permission_classes=[permissions.AllowAny])
     def chatbot_ia(self, request):
         user_message = request.data.get("message", "").strip()
         
@@ -119,7 +119,7 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
                 "details": str(e)
             }, status=503)
         
-    @action(detail=False, methods=['post'], url_path='predict')
+    @action(detail=False, methods=['post'], url_path='predict', permission_classes=[permissions.AllowAny])
     def predict_all_risks(self, request):
         ville_nom = request.data.get('ville_nom')
         meteo_data = request.data.get('meteo_data', {})
