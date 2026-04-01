@@ -9,6 +9,7 @@ from meteo.views import ReleveMeteoViewSet
 from air_quality.views import QualiteAirViewSet
 from alerts.views import AlerteViewSet
 from users.views import UtilisateurViewSet
+from air_quality.import_views import import_dataset
 
 router = DefaultRouter()
 router.register(r'regions', RegionViewSet, basename='region')
@@ -22,6 +23,7 @@ urlpatterns =[
     path('admin/', admin.site.urls),
     path('api/v1/', include(router.urls)),
     
+    path('api/v1/data/import/', import_dataset, name='import_dataset'),
     path('api/v1/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
