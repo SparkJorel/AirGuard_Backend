@@ -2,9 +2,7 @@ import io
 from django.http import FileResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-from openai import OpenAI
 from django.utils import timezone
-from django.conf import settings
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -221,49 +219,142 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'], url_path='chat', permission_classes=[permissions.AllowAny])
     def chatbot_ia(self, request):
-        user_message = request.data.get("message", "").strip()
-        
+        user_message = request.data.get("message", "").strip().lower()
+
         if not user_message:
             return Response({"error": "Le message ne peut pas être vide."}, status=400)
 
-        if not settings.OPENAI_API_KEY:
-            return Response({
-                "response": "L'intégration IA est en cours de configuration. Dès que la clé API sera insérée, je répondrai intelligemment à vos requêtes sur la qualité de l'air !",
-                "source": "AirGuard Bot"
-            })
+        from locations.models import Ville
+        from alerts.models import Alerte
 
-        try:
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        # Detect city in message
+        villes = Ville.objects.select_related('region').all()
+        ville_trouvee = None
+        for v in villes:
+            if v.nom.lower() in user_message:
+                ville_trouvee = v
+                break
 
-            system_prompt = (
-                "Tu es AirGuard, un assistant virtuel expert en qualité de l'air, climat et santé publique au Cameroun. "
-                "Tu t'adresses à des citoyens. Tes réponses doivent être concises, bienveillantes et proposer des "
-                "solutions pratiques (ex: asthme, sport, enfants). Si on te parle d'une ville (Yaoundé, Douala, Maroua...), "
-                "adapte-toi au contexte climatique local."
+        # Get latest data
+        derniere_date = QualiteAir.objects.filter(est_prediction=False).order_by('-date_cible').values_list('date_cible', flat=True).first()
+
+        # Build response based on question type
+        reply = ""
+
+        if ville_trouvee:
+            # City-specific response
+            aqi = QualiteAir.objects.filter(ville=ville_trouvee, est_prediction=False).order_by('-date_cible').first()
+            alerte = Alerte.objects.filter(ville=ville_trouvee, est_active=True, statut='publiee').first()
+
+            if aqi:
+                conseils = {
+                    'Bon': "L'air est pur ! Vous pouvez profiter de vos activités en extérieur sans restriction.",
+                    'Modere': "L'air est acceptable. Les personnes sensibles (asthmatiques, enfants, personnes âgées) doivent rester vigilantes.",
+                    'Sensible': "Attention, l'air est dégradé. Limitez les activités physiques en extérieur. Fermez les fenêtres aux heures de pointe.",
+                    'Malsain': "L'air est malsain ! Évitez de sortir. Portez un masque si nécessaire. Fermez les fenêtres.",
+                    'Tres_malsain': "DANGER — l'air est très malsain. Restez à l'intérieur. Aucune activité en extérieur. Protégez les enfants et personnes âgées.",
+                    'Dangereux': "URGENCE SANITAIRE — ne sortez pas ! Fermez portes et fenêtres. Appelez le 119 en cas de difficulté respiratoire.",
+                }
+                conseil = conseils.get(aqi.categorie, "")
+                reply = (
+                    f"À {ville_trouvee.nom} ({ville_trouvee.region.nom}), "
+                    f"l'indice de qualité de l'air est de {aqi.indice_aqi} "
+                    f"(PM2.5 : {aqi.valeur_pm25:.1f} µg/m³). "
+                    f"Catégorie : {aqi.categorie}.\n\n{conseil}"
+                )
+                if alerte:
+                    reply += f"\n\n⚠️ Alerte active : {alerte.message_fr}"
+            else:
+                reply = f"Je n'ai pas encore de données pour {ville_trouvee.nom}. Les données sont mises à jour régulièrement."
+
+        elif any(mot in user_message for mot in ['alerte', 'danger', 'urgence', 'risque']):
+            alertes = Alerte.objects.filter(est_active=True, statut='publiee').select_related('ville')[:5]
+            if alertes:
+                reply = f"Il y a {len(alertes)} alerte(s) active(s) :\n\n"
+                for a in alertes:
+                    reply += f"• {a.ville.nom} — {a.niveau_severite.upper()} : {a.message_fr[:100]}\n"
+            else:
+                reply = "Bonne nouvelle ! Aucune alerte n'est active pour le moment au Cameroun."
+
+        elif any(mot in user_message for mot in ['conseil', 'santé', 'protection', 'masque', 'enfant', 'asthme', 'sport']):
+            reply = (
+                "Voici des conseils pour protéger votre santé :\n\n"
+                "• Consultez l'AQI de votre ville avant de sortir\n"
+                "• Les personnes asthmatiques doivent garder leur inhalateur à portée\n"
+                "• Évitez le sport en extérieur quand l'AQI dépasse 100\n"
+                "• Fermez les fenêtres aux heures de pointe (7h-9h et 17h-19h)\n"
+                "• Les enfants et personnes âgées sont les plus vulnérables\n"
+                "• Hydratez-vous régulièrement\n"
+                "• En cas de gêne respiratoire, consultez un médecin"
             )
 
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                max_tokens=200,
-                temperature=0.7
+        elif any(mot in user_message for mot in ['bonjour', 'salut', 'hello', 'bonsoir']):
+            reply = (
+                "Bonjour ! Je suis AirGuard Bot, votre assistant qualité de l'air au Cameroun.\n\n"
+                "Vous pouvez me poser des questions comme :\n"
+                "• « Comment est l'air à Douala ? »\n"
+                "• « Y a-t-il des alertes en cours ? »\n"
+                "• « Quels conseils pour protéger ma santé ? »\n"
+                "• « Quelle est la ville la plus polluée ? »"
             )
 
-            bot_reply = response.choices[0].message.content.strip()
-            
-            return Response({
-                "response": bot_reply,
-                "source": "AirGuard Bot (Powered by ML Masters)"
-            })
-            
-        except Exception as e:
-            return Response({
-                "error": "Le service IA est temporairement indisponible.",
-                "details": str(e)
-            }, status=503)
+        elif any(mot in user_message for mot in ['pire', 'pollu', 'mauvais', 'top']):
+            if derniere_date:
+                top5 = QualiteAir.objects.filter(
+                    date_cible=derniere_date, est_prediction=False
+                ).select_related('ville__region').order_by('-indice_aqi')[:5]
+                if top5:
+                    reply = "Les villes avec la pire qualité de l'air :\n\n"
+                    for i, aq in enumerate(top5, 1):
+                        reply += f"{i}. {aq.ville.nom} — AQI {aq.indice_aqi} ({aq.categorie})\n"
+                else:
+                    reply = "Pas de données disponibles pour le moment."
+            else:
+                reply = "Pas de données disponibles pour le moment."
+
+        elif any(mot in user_message for mot in ['meilleur', 'propre', 'bon', 'sain']):
+            if derniere_date:
+                top5 = QualiteAir.objects.filter(
+                    date_cible=derniere_date, est_prediction=False
+                ).select_related('ville__region').order_by('indice_aqi')[:5]
+                if top5:
+                    reply = "Les villes avec le meilleur air :\n\n"
+                    for i, aq in enumerate(top5, 1):
+                        reply += f"{i}. {aq.ville.nom} — AQI {aq.indice_aqi} ({aq.categorie})\n"
+                else:
+                    reply = "Pas de données disponibles pour le moment."
+            else:
+                reply = "Pas de données disponibles pour le moment."
+
+        else:
+            # Default: national summary
+            if derniere_date:
+                from django.db.models import Avg, Count, Q
+                stats = QualiteAir.objects.filter(
+                    date_cible=derniere_date, est_prediction=False
+                ).aggregate(
+                    avg_aqi=Avg('indice_aqi'),
+                    critiques=Count('id', filter=Q(categorie__in=['Malsain', 'Tres_malsain', 'Dangereux'])),
+                    total=Count('id'),
+                )
+                avg = round(stats['avg_aqi'] or 0)
+                reply = (
+                    f"Résumé national ({derniere_date}) :\n\n"
+                    f"• AQI moyen : {avg}\n"
+                    f"• Villes surveillées : {stats['total']}\n"
+                    f"• Villes en zone critique : {stats['critiques']}\n\n"
+                    "Posez-moi une question sur une ville précise pour plus de détails !"
+                )
+            else:
+                reply = (
+                    "Je suis AirGuard Bot. Je peux vous renseigner sur la qualité de l'air dans les villes du Cameroun. "
+                    "Demandez-moi par exemple : « Comment est l'air à Yaoundé ? »"
+                )
+
+        return Response({
+            "response": reply,
+            "source": "AirGuard Bot (ML Masters)"
+        })
         
     @action(detail=False, methods=['post'], url_path='predict', permission_classes=[permissions.AllowAny])
     def predict_all_risks(self, request):
