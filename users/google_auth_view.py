@@ -66,10 +66,19 @@ def google_auth(request):
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
 
+        has_city = user.villes_favorites.exists()
+
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
             "created": created,
+            "has_city": has_city,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+            }
         })
 
     except ValueError as e:
