@@ -69,9 +69,11 @@ def build_features_from_db(ville_nom):
     except Ville.DoesNotExist:
         return None
 
-    # Get last 30 days of meteo for this city
+    # Get last 30 days of REAL meteo (not future forecasts)
+    from django.utils import timezone
+    today = timezone.now().date()
     releves = list(
-        ReleveMeteo.objects.filter(ville=ville)
+        ReleveMeteo.objects.filter(ville=ville, date__lte=today)
         .order_by('-date')[:30]
     )
 

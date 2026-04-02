@@ -1,10 +1,11 @@
 """
 Fetch recent weather data from Open-Meteo API for all cities.
+Only fetches data up to today (no future forecasts).
 Run daily via cron to keep data up to date.
 
 Usage:
-  python manage.py fetch_meteo          # last 30 days + 7 days forecast
-  python manage.py fetch_meteo --days 7 # last 7 days only
+  python manage.py fetch_meteo          # last 30 days up to today
+  python manage.py fetch_meteo --days 7 # last 7 days up to today
 """
 
 from datetime import date, timedelta
@@ -22,7 +23,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         today = date.today()
         start = today - timedelta(days=options['days'])
-        end = today + timedelta(days=7)
+        end = today
 
         villes = Ville.objects.all()
         total = 0

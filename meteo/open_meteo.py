@@ -99,10 +99,10 @@ def fetch_meteo_for_city(ville, start_date, end_date):
 
 
 def fetch_recent_meteo_all_cities():
-    """Fetch last 30 days + 7 days forecast for all 40 cities."""
+    """Fetch weather data up to today only (no future forecasts)."""
     today = date.today()
     start = today - timedelta(days=30)
-    end = today + timedelta(days=7)
+    end = today
 
     villes = Ville.objects.all()
     total = 0
