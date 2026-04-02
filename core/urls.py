@@ -13,6 +13,7 @@ from air_quality.import_views import import_dataset
 from alerts.auto_alerts_view import scan_alerts
 from users.google_auth_view import google_auth
 from users.register_view import register
+from air_quality.prediction_views import prediction_tomorrow, prediction_week
 
 router = DefaultRouter()
 router.register(r'regions', RegionViewSet, basename='region')
@@ -32,6 +33,8 @@ urlpatterns =[
     path('api/v1/register/', register, name='register'),
     path('api/v1/auth/google/', google_auth, name='google_auth'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/predictions/tomorrow/', prediction_tomorrow, name='prediction_tomorrow'),
+    path('api/v1/predictions/week/', prediction_week, name='prediction_week'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
