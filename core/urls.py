@@ -25,10 +25,12 @@ router.register(r'users', UtilisateurViewSet, basename='utilisateur')
 
 urlpatterns =[
     path('admin/', admin.site.urls),
-    path('api/v1/', include(router.urls)),
-    
-    path('api/v1/data/import/', import_dataset, name='import_dataset'),
+
+    # Custom endpoints BEFORE router to avoid conflicts
     path('api/v1/alerts/scan/', scan_alerts, name='scan_alerts'),
+    path('api/v1/data/import/', import_dataset, name='import_dataset'),
+
+    path('api/v1/', include(router.urls)),
     path('api/v1/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/register/', register, name='register'),
     path('api/v1/auth/google/', google_auth, name='google_auth'),
