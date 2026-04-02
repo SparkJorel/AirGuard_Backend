@@ -11,7 +11,14 @@ def scan_alerts(request):
     if getattr(request.user, 'role', '') != 'admin':
         return Response({"error": "Accès réservé aux administrateurs."}, status=403)
 
-    count = generer_alertes_automatiques()
+    try:
+        count = generer_alertes_automatiques()
+    except Exception as e:
+        return Response({
+            "success": False,
+            "error": f"Erreur lors du scan ML : {str(e)}"
+        }, status=500)
+
     return Response({
         "success": True,
         "alertes_generees": count,

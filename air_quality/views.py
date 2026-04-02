@@ -52,6 +52,12 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
         from locations.models import Ville
         from alerts.models import Alerte
 
+        # City filter
+        ville_nom = request.query_params.get('ville_nom')
+        ville_obj = None
+        if ville_nom:
+            ville_obj = Ville.objects.filter(nom=ville_nom).first()
+
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=2*cm, bottomMargin=2*cm)
         styles = getSampleStyleSheet()
@@ -69,14 +75,24 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
 
         # Title
         elements.append(Paragraph("AirGuard Cameroun", title_style))
-        elements.append(Paragraph(f"Rapport national de la qualite de l'air - Genere le {date_str}", subtitle_style))
+        if ville_obj:
+            elements.append(Paragraph(f"Rapport qualite de l'air - {ville_obj.nom} - Genere le {date_str}", subtitle_style))
+        else:
+            elements.append(Paragraph(f"Rapport national de la qualite de l'air - Genere le {date_str}", subtitle_style))
 
         # KPIs
-        elements.append(Paragraph("1. Indicateurs nationaux", heading_style))
+        if ville_obj:
+            elements.append(Paragraph(f"1. Indicateurs pour {ville_obj.nom}", heading_style))
+        else:
+            elements.append(Paragraph("1. Indicateurs nationaux", heading_style))
 
-        derniere_date = QualiteAir.objects.filter(est_prediction=False).order_by('-date_cible').values_list('date_cible', flat=True).first()
+        base_qs = QualiteAir.objects.filter(est_prediction=False)
+        if ville_obj:
+            base_qs = base_qs.filter(ville=ville_obj)
+
+        derniere_date = base_qs.order_by('-date_cible').values_list('date_cible', flat=True).first()
         if derniere_date:
-            donnees_jour = QualiteAir.objects.filter(date_cible=derniere_date, est_prediction=False)
+            donnees_jour = base_qs.filter(date_cible=derniere_date)
             total_villes = donnees_jour.count()
             from django.db.models import Count, Q
             stats = donnees_jour.aggregate(
@@ -90,10 +106,11 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
             bons = stats['bons']
             moderes = stats['moderes']
 
+            kpi_label = f'AQI moyen - {ville_obj.nom}' if ville_obj else 'AQI moyen national'
             kpi_data = [
                 ['Indicateur', 'Valeur'],
                 ['Date des donnees', str(derniere_date)],
-                ['AQI moyen national', f'{round(aqi_moyen)}'],
+                [kpi_label, f'{round(aqi_moyen)}'],
                 ['Villes surveillees', str(total_villes)],
                 ['Villes en zone critique', str(critiques)],
                 ['Villes en zone bonne', str(bons)],
@@ -115,12 +132,16 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
             elements.append(Paragraph("Aucune donnee disponible.", body_style))
 
         # Top 10 worst cities
-        elements.append(Paragraph("2. Top 10 des villes les plus polluees", heading_style))
+        if ville_obj:
+            elements.append(Paragraph(f"2. Donnees pour {ville_obj.nom}", heading_style))
+        else:
+            elements.append(Paragraph("2. Top 10 des villes les plus polluees", heading_style))
 
         if derniere_date:
-            top10 = QualiteAir.objects.filter(
-                date_cible=derniere_date, est_prediction=False
-            ).select_related('ville__region').order_by('-indice_aqi')[:10]
+            top10_qs = base_qs.filter(
+                date_cible=derniere_date
+            ).select_related('ville__region').order_by('-indice_aqi')
+            top10 = top10_qs[:10]
 
             if top10:
                 city_data = [['Rang', 'Ville', 'Region', 'AQI', 'PM2.5 (ug/m3)', 'Categorie']]
@@ -172,7 +193,10 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
         # Active alerts
         elements.append(Paragraph("4. Alertes actives", heading_style))
 
-        alertes_actives = Alerte.objects.filter(est_active=True, statut='publiee').select_related('ville')
+        alertes_qs = Alerte.objects.filter(est_active=True, statut='publiee').select_related('ville')
+        if ville_obj:
+            alertes_qs = alertes_qs.filter(ville=ville_obj)
+        alertes_actives = alertes_qs
         if alertes_actives.exists():
             alert_data = [['Ville', 'Severite', 'Message']]
             for a in alertes_actives[:10]:
@@ -214,7 +238,10 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
 
         doc.build(elements)
         buffer.seek(0)
-        filename = f'Rapport_AirGuard_{now.strftime("%Y%m%d")}.pdf'
+        if ville_obj:
+            filename = f'Rapport_AirGuard_{ville_obj.nom}_{now.strftime("%Y%m%d")}.pdf'
+        else:
+            filename = f'Rapport_AirGuard_National_{now.strftime("%Y%m%d")}.pdf'
         return FileResponse(buffer, as_attachment=True, filename=filename)
     
     @action(detail=False, methods=['post'], url_path='chat', permission_classes=[permissions.AllowAny])

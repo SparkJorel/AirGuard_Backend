@@ -167,15 +167,10 @@ def generer_alertes_automatiques():
 
     from django.db.models import Max, Subquery, OuterRef
 
-    # Get latest AQI date per city in ONE query
-    latest_dates = QualiteAir.objects.filter(
-        est_prediction=False,
-    ).values('ville').annotate(max_date=Max('date_cible'))
-
-    # Get the actual AQI records for those dates
+    # Get the actual AQI records for the latest date per city
     latest_aqis = QualiteAir.objects.filter(
         est_prediction=False,
-        date_cible__in=Subquery(
+        date_cible=Subquery(
             QualiteAir.objects.filter(
                 ville=OuterRef('ville'),
                 est_prediction=False,
