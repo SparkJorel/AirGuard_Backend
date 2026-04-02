@@ -83,19 +83,7 @@ def prediction_tomorrow(request):
         est_prediction=True,
     ).select_related('ville').first()
 
-    if stored:
-        cat_key = stored.categorie
-        return Response({
-            "ville": ville_nom,
-            "date": str(tomorrow),
-            "aqi": stored.indice_aqi,
-            "pm25": stored.valeur_pm25,
-            "categorie": cat_key,
-            "label": LABELS.get(cat_key, cat_key),
-            "conseil": CONSEILS.get(cat_key, ""),
-        })
-
-    # Generate fresh prediction
+    # Always generate fresh prediction to include chaleur/risques details
     pred = _get_prediction_for_city(ville_nom)
     if not pred:
         return Response({"error": f"Impossible de prédire pour '{ville_nom}'."}, status=400)
