@@ -49,18 +49,18 @@ def _get_prediction_for_city(ville_nom):
     return {
         "ville": ville_nom,
         "aqi": aqi_data.get("aqi_estime", 0),
-        "pm25": aqi_data.get("pm25_proxy_ugm3", 0),
+        "pm25": round(aqi_data.get("pm25_proxy_ugm3", 0), 1),
         "categorie": cat_key,
         "label": LABELS.get(cat_key, categorie),
         "conseil": CONSEILS.get(cat_key, ""),
         "chaleur": {
-            "heat_index": pred.get("chaleur_sante", {}).get("heat_index_ressenti", 0),
-            "extreme": pred.get("chaleur_sante", {}).get("chaleur_extreme_0_10", 0),
+            "heat_index": round(pred.get("chaleur_sante", {}).get("heat_index_ressenti", 0), 1),
+            "extreme": round(pred.get("chaleur_sante", {}).get("chaleur_extreme_0_10", 0), 1),
             "avertissement": pred.get("chaleur_sante", {}).get("avertissement", "Normal"),
         },
         "risques": {
-            "inondation": pred.get("risques_naturels", {}).get("risque_inondation_0_10", 0),
-            "secheresse": pred.get("risques_naturels", {}).get("stress_hydrique_agricole", 0),
+            "inondation": round(pred.get("risques_naturels", {}).get("risque_inondation_0_10", 0), 1),
+            "secheresse": round(pred.get("risques_naturels", {}).get("stress_hydrique_agricole", 0), 1),
             "categorie_inondation": pred.get("risques_naturels", {}).get("categorie_inondation", ""),
         },
     }
