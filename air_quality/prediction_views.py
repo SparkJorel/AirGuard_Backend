@@ -46,6 +46,38 @@ def _get_prediction_for_city(ville_nom):
     elif "Très" in categorie or "Tres" in categorie:
         cat_key = "Tres_malsain"
 
+    # Normalize model outputs to human-readable ranges
+    raw_heat = pred.get("chaleur_sante", {}).get("heat_index_ressenti", 0)
+    raw_extreme = pred.get("chaleur_sante", {}).get("chaleur_extreme_0_10", 0)
+    raw_flood = pred.get("risques_naturels", {}).get("risque_inondation_0_10", 0)
+    raw_drought = pred.get("risques_naturels", {}).get("stress_hydrique_agricole", 0)
+
+    # Heat index: Rothfusz formula outputs high values, clamp to realistic range
+    heat_index = max(20, min(round(raw_heat, 1), 55))
+    # Extreme heat: should be 0-10
+    extreme = max(0, min(round(raw_extreme, 1), 10))
+    # Flood risk: should be 0-10
+    flood = max(0, min(round(raw_flood, 1), 10))
+    # Drought: cumulative water deficit, normalize to 0-10 scale
+    drought = max(0, min(round(raw_drought / 5000, 1), 10)) if raw_drought > 10 else round(max(0, raw_drought), 1)
+
+    # Determine warnings from normalized values
+    if heat_index > 45:
+        heat_warning = "Danger"
+    elif heat_index > 38:
+        heat_warning = "Attention"
+    else:
+        heat_warning = "Normal"
+
+    if flood > 6:
+        flood_cat = "Alerte inondation"
+    elif flood > 4:
+        flood_cat = "Risque élevé"
+    elif flood > 2:
+        flood_cat = "Risque modéré"
+    else:
+        flood_cat = "Risque faible"
+
     return {
         "ville": ville_nom,
         "aqi": aqi_data.get("aqi_estime", 0),
@@ -54,14 +86,14 @@ def _get_prediction_for_city(ville_nom):
         "label": LABELS.get(cat_key, categorie),
         "conseil": CONSEILS.get(cat_key, ""),
         "chaleur": {
-            "heat_index": round(pred.get("chaleur_sante", {}).get("heat_index_ressenti", 0), 1),
-            "extreme": round(pred.get("chaleur_sante", {}).get("chaleur_extreme_0_10", 0), 1),
-            "avertissement": pred.get("chaleur_sante", {}).get("avertissement", "Normal"),
+            "heat_index": heat_index,
+            "extreme": extreme,
+            "avertissement": heat_warning,
         },
         "risques": {
-            "inondation": round(pred.get("risques_naturels", {}).get("risque_inondation_0_10", 0), 1),
-            "secheresse": round(pred.get("risques_naturels", {}).get("stress_hydrique_agricole", 0), 1),
-            "categorie_inondation": pred.get("risques_naturels", {}).get("categorie_inondation", ""),
+            "inondation": flood,
+            "secheresse": drought,
+            "categorie_inondation": flood_cat,
         },
     }
 
