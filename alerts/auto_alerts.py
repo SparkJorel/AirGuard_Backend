@@ -219,7 +219,9 @@ def generer_alertes_automatiques():
             },
         ))
 
+    villes_alertees = [a.ville.nom for a in alerts_to_create]
+
     if alerts_to_create:
         Alerte.objects.bulk_create(alerts_to_create)
 
-    return len(alerts_to_create)
+    return len(alerts_to_create), villes_alertees
