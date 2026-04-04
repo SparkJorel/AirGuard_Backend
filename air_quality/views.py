@@ -247,14 +247,15 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='chat', permission_classes=[permissions.AllowAny])
     def chatbot_ia(self, request):
         user_message = request.data.get("message", "").strip().lower()
+        lang = request.data.get("lang", "fr")
+        en = lang == "en"
 
         if not user_message:
-            return Response({"error": "Le message ne peut pas être vide."}, status=400)
+            return Response({"error": "Message is empty." if en else "Le message ne peut pas etre vide."}, status=400)
 
         from locations.models import Ville
         from alerts.models import Alerte
 
-        # Detect city in message
         villes = Ville.objects.select_related('region').all()
         ville_trouvee = None
         for v in villes:
@@ -262,121 +263,97 @@ class QualiteAirViewSet(viewsets.ModelViewSet):
                 ville_trouvee = v
                 break
 
-        # Get latest data
         derniere_date = QualiteAir.objects.filter(est_prediction=False).order_by('-date_cible').values_list('date_cible', flat=True).first()
-
-        # Build response based on question type
         reply = ""
 
+        CONSEILS = {
+            'Bon': ("Clean air! Enjoy outdoor activities.", "L'air est pur ! Profitez de vos activites en exterieur."),
+            'Modere': ("Acceptable air. Sensitive people should be cautious.", "Air acceptable. Les personnes sensibles doivent rester vigilantes."),
+            'Sensible': ("Degraded air. Limit outdoor exertion.", "Air degrade. Limitez les activites physiques en exterieur."),
+            'Malsain': ("Unhealthy air! Avoid going outside. Wear a mask.", "Air malsain ! Evitez de sortir. Portez un masque."),
+            'Tres_malsain': ("DANGER — very unhealthy. Stay indoors.", "DANGER — air tres malsain. Restez a l'interieur."),
+            'Dangereux': ("EMERGENCY — do not go outside! Call 119 if breathing difficulty.", "URGENCE — ne sortez pas ! Appelez le 119 en cas de difficulte respiratoire."),
+        }
+
         if ville_trouvee:
-            # City-specific response
             aqi = QualiteAir.objects.filter(ville=ville_trouvee, est_prediction=False).order_by('-date_cible').first()
             alerte = Alerte.objects.filter(ville=ville_trouvee, est_active=True, statut='publiee').first()
-
             if aqi:
-                conseils = {
-                    'Bon': "L'air est pur ! Vous pouvez profiter de vos activités en extérieur sans restriction.",
-                    'Modere': "L'air est acceptable. Les personnes sensibles (asthmatiques, enfants, personnes âgées) doivent rester vigilantes.",
-                    'Sensible': "Attention, l'air est dégradé. Limitez les activités physiques en extérieur. Fermez les fenêtres aux heures de pointe.",
-                    'Malsain': "L'air est malsain ! Évitez de sortir. Portez un masque si nécessaire. Fermez les fenêtres.",
-                    'Tres_malsain': "DANGER — l'air est très malsain. Restez à l'intérieur. Aucune activité en extérieur. Protégez les enfants et personnes âgées.",
-                    'Dangereux': "URGENCE SANITAIRE — ne sortez pas ! Fermez portes et fenêtres. Appelez le 119 en cas de difficulté respiratoire.",
-                }
-                conseil = conseils.get(aqi.categorie, "")
-                reply = (
-                    f"À {ville_trouvee.nom} ({ville_trouvee.region.nom}), "
-                    f"l'indice de qualité de l'air est de {aqi.indice_aqi} "
-                    f"(PM2.5 : {aqi.valeur_pm25:.1f} µg/m³). "
-                    f"Catégorie : {aqi.categorie}.\n\n{conseil}"
-                )
+                conseil = CONSEILS.get(aqi.categorie, ("", ""))[0 if en else 1]
+                if en:
+                    reply = f"In {ville_trouvee.nom} ({ville_trouvee.region.nom}), the air quality index is {aqi.indice_aqi} (PM2.5: {aqi.valeur_pm25:.1f} ug/m3). Category: {aqi.categorie}.\n\n{conseil}"
+                else:
+                    reply = f"A {ville_trouvee.nom} ({ville_trouvee.region.nom}), l'indice de qualite de l'air est de {aqi.indice_aqi} (PM2.5 : {aqi.valeur_pm25:.1f} ug/m3). Categorie : {aqi.categorie}.\n\n{conseil}"
                 if alerte:
-                    reply += f"\n\n⚠️ Alerte active : {alerte.message_fr}"
+                    msg = alerte.message_en if en else alerte.message_fr
+                    reply += f"\n\nActive alert: {msg}" if en else f"\n\nAlerte active : {msg}"
             else:
-                reply = f"Je n'ai pas encore de données pour {ville_trouvee.nom}. Les données sont mises à jour régulièrement."
+                reply = f"No data available yet for {ville_trouvee.nom}." if en else f"Pas encore de donnees pour {ville_trouvee.nom}."
 
-        elif any(mot in user_message for mot in ['alerte', 'danger', 'urgence', 'risque']):
+        elif any(mot in user_message for mot in ['alert', 'alerte', 'danger', 'urgence', 'risk', 'risque']):
             alertes = Alerte.objects.filter(est_active=True, statut='publiee').select_related('ville')[:5]
             if alertes:
-                reply = f"Il y a {len(alertes)} alerte(s) active(s) :\n\n"
+                reply = f"There are {len(alertes)} active alert(s):\n\n" if en else f"Il y a {len(alertes)} alerte(s) active(s) :\n\n"
                 for a in alertes:
-                    reply += f"• {a.ville.nom} — {a.niveau_severite.upper()} : {a.message_fr[:100]}\n"
+                    msg = a.message_en if en else a.message_fr
+                    reply += f"- {a.ville.nom} — {a.niveau_severite.upper()}: {msg[:100]}\n"
             else:
-                reply = "Bonne nouvelle ! Aucune alerte n'est active pour le moment au Cameroun."
+                reply = "Good news! No active alerts in Cameroon." if en else "Bonne nouvelle ! Aucune alerte active au Cameroun."
 
-        elif any(mot in user_message for mot in ['conseil', 'santé', 'protection', 'masque', 'enfant', 'asthme', 'sport']):
-            reply = (
-                "Voici des conseils pour protéger votre santé :\n\n"
-                "• Consultez l'AQI de votre ville avant de sortir\n"
-                "• Les personnes asthmatiques doivent garder leur inhalateur à portée\n"
-                "• Évitez le sport en extérieur quand l'AQI dépasse 100\n"
-                "• Fermez les fenêtres aux heures de pointe (7h-9h et 17h-19h)\n"
-                "• Les enfants et personnes âgées sont les plus vulnérables\n"
-                "• Hydratez-vous régulièrement\n"
-                "• En cas de gêne respiratoire, consultez un médecin"
-            )
+        elif any(mot in user_message for mot in ['advice', 'conseil', 'health', 'sante', 'protection', 'mask', 'masque', 'child', 'enfant', 'asthma', 'asthme', 'sport']):
+            if en:
+                reply = "Health advice:\n\n- Check your city's AQI before going out\n- Asthmatics should keep their inhaler nearby\n- Avoid outdoor sports when AQI > 100\n- Close windows during peak hours (7-9am, 5-7pm)\n- Children and elderly are most vulnerable\n- Stay hydrated\n- See a doctor if you have breathing difficulties"
+            else:
+                reply = "Conseils sante :\n\n- Consultez l'AQI de votre ville avant de sortir\n- Les asthmatiques doivent garder leur inhalateur a portee\n- Evitez le sport en exterieur quand l'AQI depasse 100\n- Fermez les fenetres aux heures de pointe (7h-9h et 17h-19h)\n- Les enfants et personnes agees sont les plus vulnerables\n- Hydratez-vous regulierement\n- Consultez un medecin en cas de gene respiratoire"
 
-        elif any(mot in user_message for mot in ['bonjour', 'salut', 'hello', 'bonsoir']):
-            reply = (
-                "Bonjour ! Je suis AirGuard Bot, votre assistant qualité de l'air au Cameroun.\n\n"
-                "Vous pouvez me poser des questions comme :\n"
-                "• « Comment est l'air à Douala ? »\n"
-                "• « Y a-t-il des alertes en cours ? »\n"
-                "• « Quels conseils pour protéger ma santé ? »\n"
-                "• « Quelle est la ville la plus polluée ? »"
-            )
+        elif any(mot in user_message for mot in ['bonjour', 'salut', 'hello', 'hi', 'bonsoir', 'good']):
+            if en:
+                reply = "Hello! I'm AirGuard Bot, your air quality assistant for Cameroon.\n\nYou can ask me:\n- \"How is the air in Douala?\"\n- \"Are there any active alerts?\"\n- \"Health advice?\"\n- \"Most polluted city?\""
+            else:
+                reply = "Bonjour ! Je suis AirGuard Bot, votre assistant qualite de l'air au Cameroun.\n\nVous pouvez me demander :\n- \"Comment est l'air a Douala ?\"\n- \"Y a-t-il des alertes ?\"\n- \"Conseils sante ?\"\n- \"Ville la plus polluee ?\""
 
-        elif any(mot in user_message for mot in ['pire', 'pollu', 'mauvais', 'top']):
+        elif any(mot in user_message for mot in ['worst', 'pire', 'pollu', 'mauvais', 'bad', 'top']):
             if derniere_date:
-                top5 = QualiteAir.objects.filter(
-                    date_cible=derniere_date, est_prediction=False
-                ).select_related('ville__region').order_by('-indice_aqi')[:5]
+                top5 = QualiteAir.objects.filter(date_cible=derniere_date, est_prediction=False).select_related('ville__region').order_by('-indice_aqi')[:5]
                 if top5:
-                    reply = "Les villes avec la pire qualité de l'air :\n\n"
+                    reply = ("Cities with worst air quality:\n\n" if en else "Villes avec la pire qualite de l'air :\n\n")
                     for i, aq in enumerate(top5, 1):
                         reply += f"{i}. {aq.ville.nom} — AQI {aq.indice_aqi} ({aq.categorie})\n"
                 else:
-                    reply = "Pas de données disponibles pour le moment."
+                    reply = "No data available." if en else "Pas de donnees disponibles."
             else:
-                reply = "Pas de données disponibles pour le moment."
+                reply = "No data available." if en else "Pas de donnees disponibles."
 
-        elif any(mot in user_message for mot in ['meilleur', 'propre', 'bon', 'sain']):
+        elif any(mot in user_message for mot in ['best', 'meilleur', 'propre', 'clean', 'bon', 'sain', 'good air']):
             if derniere_date:
-                top5 = QualiteAir.objects.filter(
-                    date_cible=derniere_date, est_prediction=False
-                ).select_related('ville__region').order_by('indice_aqi')[:5]
+                top5 = QualiteAir.objects.filter(date_cible=derniere_date, est_prediction=False).select_related('ville__region').order_by('indice_aqi')[:5]
                 if top5:
-                    reply = "Les villes avec le meilleur air :\n\n"
+                    reply = ("Cities with best air quality:\n\n" if en else "Villes avec le meilleur air :\n\n")
                     for i, aq in enumerate(top5, 1):
                         reply += f"{i}. {aq.ville.nom} — AQI {aq.indice_aqi} ({aq.categorie})\n"
                 else:
-                    reply = "Pas de données disponibles pour le moment."
+                    reply = "No data available." if en else "Pas de donnees disponibles."
             else:
-                reply = "Pas de données disponibles pour le moment."
+                reply = "No data available." if en else "Pas de donnees disponibles."
 
         else:
-            # Default: national summary
             if derniere_date:
                 from django.db.models import Avg, Count, Q
-                stats = QualiteAir.objects.filter(
-                    date_cible=derniere_date, est_prediction=False
-                ).aggregate(
+                stats = QualiteAir.objects.filter(date_cible=derniere_date, est_prediction=False).aggregate(
                     avg_aqi=Avg('indice_aqi'),
                     critiques=Count('id', filter=Q(categorie__in=['Malsain', 'Tres_malsain', 'Dangereux'])),
                     total=Count('id'),
                 )
                 avg = round(stats['avg_aqi'] or 0)
-                reply = (
-                    f"Résumé national ({derniere_date}) :\n\n"
-                    f"• AQI moyen : {avg}\n"
-                    f"• Villes surveillées : {stats['total']}\n"
-                    f"• Villes en zone critique : {stats['critiques']}\n\n"
-                    "Posez-moi une question sur une ville précise pour plus de détails !"
-                )
+                if en:
+                    reply = f"National summary ({derniere_date}):\n\n- Average AQI: {avg}\n- Cities monitored: {stats['total']}\n- Cities in critical zone: {stats['critiques']}\n\nAsk me about a specific city for more details!"
+                else:
+                    reply = f"Resume national ({derniere_date}) :\n\n- AQI moyen : {avg}\n- Villes surveillees : {stats['total']}\n- Villes en zone critique : {stats['critiques']}\n\nPosez-moi une question sur une ville pour plus de details !"
             else:
-                reply = (
-                    "Je suis AirGuard Bot. Je peux vous renseigner sur la qualité de l'air dans les villes du Cameroun. "
-                    "Demandez-moi par exemple : « Comment est l'air à Yaoundé ? »"
-                )
+                if en:
+                    reply = "I'm AirGuard Bot. Ask me about air quality in any Cameroonian city. Example: \"How is the air in Yaounde?\""
+                else:
+                    reply = "Je suis AirGuard Bot. Demandez-moi par exemple : \"Comment est l'air a Yaounde ?\""
 
         return Response({
             "response": reply,
