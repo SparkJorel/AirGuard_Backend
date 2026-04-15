@@ -17,8 +17,8 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no administrator@157.173.116.245 << 'DEPLOY'
-            cd /home/administrator/airguard-backend
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no jorel@157.173.116.245 << 'DEPLOY'
+            cd /home/jorel/airguard-backend
             git fetch origin && git reset --hard origin/main
             docker compose up -d --build
             sleep 10
